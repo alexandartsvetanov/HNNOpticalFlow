@@ -7,7 +7,7 @@ from codeFromPaperHnn.utils import choose_nonlinearity
 from codeFromPaperHnn.nn_models import MLP
 from codeFromPaperHnn.nn_models import *
 from codeFromPaperHnn.hnn import *
-from codeFromPaperHnn.dasitestvam import HNNPredict
+from codeFromPaperHnn.TrainedModel import HNNPredict
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
