@@ -9,18 +9,11 @@ from codeFromPaperHnn.nn_models import MLP
 from codeFromPaperHnn.nn_models import *
 from codeFromPaperHnn.hnn import *
 
-from codeFromPaperHnn.dasitestvam import HNNPredict, HNNCleanPredict, NinePointPredict
+from codeFromPaperHnn.TrainedModel import HNNPredict, HNNCleanPredict, NinePointPredict
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 # Load frames
-
-
-
-###################################3
-
-
-###################################3
 
 def euclidean_distance(point1, point2):
     x1, y1 = point1
@@ -85,7 +78,6 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
     # Calculate flow vectors (displacement)
     flow_vectors = np.array(old_points) - np.array(new_points)
 
-    #print("Nachaloto", old_points[0], new_points[0], flow_vectors[0])
     # Initialize grid
     grid_flow = [[[] for _ in range(3)] for _ in range(3)]
     grid_flowPoints = [[[] for _ in range(3)] for _ in range(3)]
@@ -94,7 +86,6 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
     # Calculate cell dimensions
     cell_width = image_width / 3
     cell_height = image_height / 3
-    #print("Dimentions:", cell_width, cell_height, upMin, rightMin)
     if cell_height == 0:
         cell_height = 0.0001
     if cell_width == 0:
@@ -110,7 +101,6 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
         # Determine grid cell indices (0, 1, or 2)
         col = min(int((x - rightMin) // cell_width), 2)
         row = min(int((y - upMin) // cell_height), 2)
-        #print(dx, dy, row, col)
 
         # Store flow vector in corresponding grid cell
         grid_flow[row][col].append((dx, dy))
@@ -119,8 +109,6 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
 
     # Calculate average flow for each grid cell
     avg_grid_flow = np.zeros((3, 3, 2))  # 3x3 grid, each with (avg_dx, avg_dy)
-    #print(upMin, rightMin, upMax, rightMax)
-    #cv2.rectangle(frame2, (int(rightMin), int(upMin)), (int(rightMax), int(upMax)), (255, 0, 0), -1)
     res = []
     resHnn = []
     fragmentNum = 0
@@ -134,66 +122,47 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
             b = upMin + (image_height / 6) * (2 * row + 1)
 
             if len(oldGrid[row][col]) == 0:
-                print("vatre", oldGrid[row][col])
                 oldGrid[row][col] = [a, b]
-                print(oldGrid[row][col])
-                print(oldGrid)
                 continue
             aold = oldGrid[row][col][0]
             bold = oldGrid[row][col][1]
             oldGrid[row][col] = [a, b]
-            #print("Problema", row, col, a, b)
-            #frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (255, 0, 0), -1)
-            #print(a, b, row, col)
             if grid_flow[row][col]:  # if cell has flow vectors
 
                 avg_dx = np.mean([f[0] for f in grid_flow[row][col]])
                 avg_dy = np.mean([f[1] for f in grid_flow[row][col]])
                 avg_grid_flow[row, col] = [avg_dx, avg_dy]
-                print("Predi", a, b, aold, bold, a - aold, b - bold)
-
-
-                #avg_dx, avg_dy = HNNPredict(a, b, avg_dx, avg_dy, False)
 
                 res.append([fragmentNum, a, b, avg_dx, avg_dy])
                 points.append(a)
                 points.append(b)
                 velocities.append(avg_dx)
                 velocities.append(avg_dy)
-
-                #print("Sled", a, b, avg_dx, avg_dy, res, resHnn)
-                #mask = cv2.line(mask, (int(a), int(b)), (int(a + (5 * avg_dx)), int(b + (5 * avg_dy))), (120, 120, 255), 2)
-
-                #mask = cv2.line(mask, (int(a), int(b)), (int(a + 50), int(b + 50)), (0, 0, 255), 2)
                 frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (255, 0, 0), -1)
-                if col == 2 and row == 0:
-                    #print(grid_flowPoints[row][col])
-                    #print(grid_flow[row][col])
-                    #print(avg_dx, avg_dy, a, b, int(a + 5 * avg_dx), int(b + 5 * avg_dy))
-                    #mask = cv2.line(mask, (int(a), int(b)), (int(a + (50 * avg_dx)), int(b + (50 * avg_dy))), (0, 255, 255), 2)
-                    for i in grid_flowPoints[row][col]:
-                        #print("tuk", i)
-                        a = i[0]
-                        b = i[1]
-                        frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (120, 120, 255), -1)
             else:
-                print("Predi0", a, b)
                 points.append(0)
                 points.append(0)
                 velocities.append(0)
                 velocities.append(0)
     if len(points) == 0:
-        print("Prazno")
         return res, resHnn
 
     python_floats = [float(x) for x in (points + velocities)]
+    first_elements = [sublist[0] for sublist in res]
 
     out = NinePointPredict(python_floats, False)
-    print("Sled", python_floats, "###", out)
-    resHnn.append(out[0])
+    relout = []
+
     for i in range(0, 18, 2):
-        print("ito", i, int(python_floats[i]), int(python_floats[i + 1]), int(out[0][18 + i]), int(out[0][19 + i]))
-        mask = cv2.line(mask, (int(python_floats[i]), int(python_floats[i + 1])), (int(out[0][i]) + int(out[0][18 + i]), int(out[0][i + 1]) + int(out[0][19 + i])), (120, 120, 255), 2)
+        if python_floats[i] != 0:
+            relout.append([(i + 2) / 2, out[0][i], out[0][i + 1], out[0][i + 18], out[0][i + 19]])
+
+
+    resHnn.append(relout)
+    for i in range(0, 18, 2):
+        if ((i / 2) + 1) in first_elements:
+            if int(python_floats[i]) != 0:
+                mask = cv2.line(mask, (int(python_floats[i]), int(python_floats[i + 1])), (int(out[0][i]) + int(out[0][18 + i]), int(out[0][i + 1]) + int(out[0][19 + i])), (120, 120, 255), 2)
 
     return res, resHnn
 
@@ -215,7 +184,6 @@ def caclOpFlow(frame1, frame2):
         )
         prev_pts = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
 
-        #print(next_gray)
         # Calculate optical flow
         try:
             next_pts, status, err = cv2.calcOpticalFlowPyrLK(
@@ -246,8 +214,6 @@ def caclOpFlow(frame1, frame2):
         for i, (new, old) in enumerate(zip(good_new, good_old)):
             a, b = new.ravel()
             c, d = old.ravel()
-            mask = cv2.line(mask, (int(a), int(b)), (int(c), int(d)), (0, 255, 0), 2)
-            frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (0, 0, 255), -1)
             res = calcAngleMag(a, b, c, d)
             angles.append(res[0])
             magnitudes.append(res[1])
@@ -274,7 +240,7 @@ def caclOpFlow(frame1, frame2):
         cv2.destroyAllWindows()
         return res, resHnn
 
-def runFloeForall(videNum, maskNum):
+def runFlowForAll(videNum, maskNum):
     frameStart = cv2.imread("videos" + videNum + "/Frames/0000.jpg")
     size = frameStart.shape[:2]
     countFrames = count_image_files("videos" + videNum + "/Frames") - 2
@@ -308,16 +274,9 @@ def runFloeForall(videNum, maskNum):
                  (coordinates[i][2] * coordinates[i][3]) / ((size[0] * size[1]) ) *
                  (1 - euclidean_distance([coordinates[i][0] + coordinates[i][2] / 2, coordinates[i][1] + coordinates[i][3] / 2],
                                         [size[1] / 2, size[0] / 2]) / euclidean_distance([0,0], [size[1] / 2, size[0] / 2])))
-        print(f"Score: {score}", (pow(frameNum, 2) / pow(countFrames, 2)),
-              ((coordinates[i][2] * coordinates[i][3]) / (size[0] * size[1])),
-              (1 - euclidean_distance([coordinates[i][0] + coordinates[i][2] / 2, coordinates[i][1] + coordinates[i][3] / 2],
-                                     [size[1] / 2, size[0] / 2]) / euclidean_distance([0,0], [size[1] / 2, size[0] / 2])),
-                                    coordinates[i][0] + coordinates[i][2] / 2, coordinates[i][1] + coordinates[i][3] / 2, [size[1] / 2, size[0] / 2],
-                                    euclidean_distance([0,0], [size[1] / 2, size[0] / 2]), frameNum, countFrames)
-        #print("Cap", cap)
         trainData.append([frameNum, coordinates[i], capHnn, cap, score])
 
-    with open(video_dir + '/trainDataHnn3step.csv', 'w', newline='') as file:
+    with open(video_dir + '/trainDataHnn9pointsStep.csv', 'w', newline='') as file:
         # Create a CSV writer object
         writer = csv.writer(file)
 
@@ -327,18 +286,15 @@ def runFloeForall(videNum, maskNum):
         # Loop through the coordinates and write each row
         for coord in trainData:
             writer.writerow(coord)
-runFloeForall(str(16), str(1))
-runFloeForall(str(14), str(1))
-runFloeForall(str(8), str(3))
-runFloeForall(str(10), str(1))
-runFloeForall(str(13), str(7))
-runFloeForall(str(4), str(1))
+# Example run for video 4, mask 1
+runFlowForAll(str(4), str(1))
 
-#runFloeForall(str(16), str(1))
-#runFloeForall(str(14), str(1))
-
-a = 1 / 0
-for vid in range(22):
-    for mask in range(10):
-        if os.path.exists("videos" + str(vid) + "/mask" + str(mask) + '/coordinates.csv'):
-            runFloeForall(str(vid), str(mask))
+# Batch process all videos (0-21) and masks (0-9) where coordinates.csv exists
+for vid in range(22):  # Videos 0 to 21
+    for mask in range(10):  # Masks 0 to 9
+        coord_file = f"videos{vid}/mask{mask}/coordinates.csv"
+        if os.path.exists(coord_file):
+            print(f"\n--- Processing video {vid}, mask {mask} ---")
+            runFlowForAll(str(vid), str(mask))
+        else:
+            print(f"Skipping video {vid}, mask {mask}: no {coord_file}")
