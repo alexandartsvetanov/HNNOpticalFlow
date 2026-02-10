@@ -4,6 +4,8 @@ os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 import numpy as np
 import torch
 import csv
+import shutil
+from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 import matplotlib
@@ -27,8 +29,9 @@ print(torch.version.cuda)  # Returns None if CPU-only
 import cv2
 
 
-vidoNum = "11" #Video number that needs to be segmented
+vidoNum = "2" #Video number that needs to be segmented
 start = "0" #Starting frame. Can be more than 0 if the segment is not present in ther first frame
+
 
 
 
@@ -52,6 +55,50 @@ model_cfg = "configs/sam2/sam2_hiera_l.yaml"
 
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device=device)
 
+
+def temp_copy_and_cleanup(filenames, source_dir=".", temp_folder_name="temp_copy_folder"):
+    """
+    1. Creates a temporary folder
+    2. Copies listed files there (if they exist)
+    3. Prints the filenames that were actually copied
+    4. Deletes the temporary folder and its contents
+    """
+    # Convert to Path objects (easier & safer)
+    source_path = Path(source_dir).resolve()
+    temp_path = source_path / temp_folder_name
+
+    # 1. Create fresh directory (delete if already exists)
+    if temp_path.exists():
+        shutil.rmtree(temp_path)
+    temp_path.mkdir(exist_ok=True)
+
+    print(f"Created temporary folder: {temp_path}\n")
+
+    copied_files = []
+
+    # 2. Copy files
+    for filename in filenames:
+        src_file = source_path / filename
+
+        if src_file.is_file():
+            dst_file = temp_path / filename
+            shutil.copy2(src_file, dst_file)  # copy2 preserves metadata
+            copied_files.append(filename)
+        else:
+            print(f"Skipped (not found): {filename}")
+
+    # 3. Print what was actually copied
+    print("\nFiles successfully copied:")
+    if copied_files:
+        for f in sorted(copied_files):
+            print(f"  • {f}")
+        print(f"\nTotal files copied: {len(copied_files)}")
+    else:
+        print("  (no files were copied)")
+    return temp_path
+
+
+
 #This function displays the mask on the image
 def show_mask(mask, ax, obj_id=None, random_color=False):
     if random_color:
@@ -67,6 +114,14 @@ def show_mask(mask, ax, obj_id=None, random_color=False):
 #Create folder with one iteration higher number for any new mask
 def create_next_mask_folder(base_path):
     # Get list of all folders in the base path
+
+    # Check if the folder exists, and create it if it doesn't
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+        print("Folder created:", base_path)
+    else:
+        print("Folder already exists:", base_path)
+
     folders = [f for f in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, f))]
 
     # Filter folders that match the 'mask' pattern and extract numbers
@@ -112,10 +167,30 @@ else:
     ]
 
 print(f"Found {len(frame_names)} JPEG frames in {video_dir}")
+
 frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
 
+while True:
 
-inference_state = predictor.init_state(video_path=video_dir)
+    if int(frame_names[0][2:4]) < int(start):
+        frame_names.pop(0)
+    else:
+        break
+
+if int(start) >0:
+    temp_path = temp_copy_and_cleanup(frame_names, video_dir)
+    temp_path = video_dir + "/temp_copy_folder"
+
+    all_items = os.listdir(temp_path)
+
+# Filter to get only files
+    files = [item for item in all_items if os.path.isfile(os.path.join(temp_path, item))]
+
+
+    inference_state = predictor.init_state(video_path=temp_path)
+else:
+    inference_state = predictor.init_state(video_path=video_dir)
+
 predictor.reset_state(inference_state)
 
 
@@ -212,6 +287,7 @@ try:
     else:
         image_path = video_dir + "/00" + start + ".jpg"  # Update this path
     box = get_bounding_box(image_path)
+    print(image_path)
     print(f"Final bounding box: {box}")
     cv2.destroyAllWindows()
 except ValueError as e:
@@ -329,6 +405,12 @@ for out_frame_idx in range(0, len(frame_names), vis_frame_stride):
     plt.show(block=False)  # Non-blocking display
     plt.pause(1)  # Display for 5 seconds
     plt.close('all')  # Close all figures
+
+ # 4. Delete everything we created
+if int(start) > 0:
+    print(f"\nRemoving temporary folder: {temp_path}")
+    shutil.rmtree(temp_path)
+print("Cleanup finished.")
 with open(output_dir + '/coordinates.csv', 'w', newline='') as file:
         # Create a CSV writer object
     writer = csv.writer(file)

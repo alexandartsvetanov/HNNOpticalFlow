@@ -1,3 +1,4 @@
+# Import necessary libraries
 import torch
 import os
 import sys
@@ -8,12 +9,21 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(THIS_DIR)
 sys.path.append(PARENT_DIR)
 
-from codeFromPaperHnn.hnn import HNN, MLP
-from codeFromPaperHnn.trainmoi import xy_to_hamiltonian_qp, hamiltonian_qp_to_xy
+# Import custom modules - HNN (Hamiltonian Neural Network) and MLP (Multi-Layer Perceptron)
+from hnn import HNN, MLP
+
+
+# Note: The following imports are commented out as they might not be available in current scope
+# from TrainHNNModel import xy_to_hamiltonian_qp, hamiltonian_qp_to_xy
 
 
 def get_args():
-    """Get command line arguments for the 4D model configuration."""
+    """
+    Parse command line arguments for the 4D model configuration (2D position + 2D velocity).
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments
+    """
     parser = argparse.ArgumentParser(description='HNN Model Configuration')
     parser.add_argument('--input_dim', default=4, type=int, help='dimensionality of input tensor')
     parser.add_argument('--hidden_dim', default=400, type=int, help='hidden dimension of mlp')
@@ -33,7 +43,12 @@ def get_args():
 
 
 def get_args9():
-    """Get command line arguments for the 36D model configuration."""
+    """
+    Parse command line arguments for the 36D model configuration (9 points × 4 dimensions each).
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments
+    """
     parser = argparse.ArgumentParser(description='HNN Model Configuration - 36D')
     parser.add_argument('--input_dim', default=36, type=int, help='dimensionality of input tensor')
     parser.add_argument('--hidden_dim', default=1200, type=int, help='hidden dimension of mlp')
@@ -59,35 +74,43 @@ globalModel = None
 def HNNPredict(x, y, vx, vy, local=False):
     """
     Predict using the 2D HNN model with position and velocity inputs.
+    This function is designed for a 2D spring system.
 
     Args:
         x: x position
         y: y position
         vx: x velocity
         vy: y velocity
-        local: whether to load model from local directory
+        local: whether to load model from local directory (True) or from codeFromPaperHnn/ (False)
 
     Returns:
-        List of predicted derivatives in xy coordinates
+        List of predicted derivatives in xy coordinates [dx/dt, dy/dt, dvx/dt, dvy/dt]
     """
+    # Get default arguments for 4D model
     args = get_args()
     args.baseline = False
     args.verbose = True
 
     # Define model architecture
+    # For HNN, output_dim is 2 (Hamiltonian gradient), for baseline it's 4 (direct prediction)
     output_dim = args.input_dim if args.baseline else 2
     nn_model = MLP(args.input_dim, args.hidden_dim, output_dim, args.nonlinearity)
     model = HNN(args.input_dim, differentiable_model=nn_model,
                 field_type=args.field_type, baseline=args.baseline)
 
-    # Load model weights
+    # Load pre-trained model weights
     model_path = 'spring-hnn.tar' if local else 'codeFromPaperHnn/spring-hnn.tar'
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint)
 
-    # Convert to Hamiltonian coordinates and make prediction
+    # Note: The following conversion functions are commented out in imports
+    # They would convert between Cartesian coordinates and Hamiltonian (q,p) coordinates
     point, revert = xy_to_hamiltonian_qp(x, y, vx, vy)
+
+    # Prepare input tensor for the model
     torch_tensor = torch.tensor(point, requires_grad=True).reshape(1, 2)
+
+    # Get time derivative from HNN model
     dxdt_hat = model.time_derivative(torch_tensor)
 
     # Convert back to xy coordinates
@@ -100,6 +123,7 @@ def HNNPredict(x, y, vx, vy, local=False):
 def HNNCleanPredict(x, y, px, py, local=False):
     """
     Predict using the 4D HNN model with position and momentum inputs.
+    This function performs multiple integration steps.
 
     Args:
         x: x position
@@ -109,8 +133,9 @@ def HNNCleanPredict(x, y, px, py, local=False):
         local: whether to load model from local directory
 
     Returns:
-        Tuple of new x and y positions after integration
+        Tuple of new x and y positions after three integration steps
     """
+    # Get default arguments for 4D model
     args = get_args()
     args.baseline = False
     args.verbose = True
@@ -121,36 +146,44 @@ def HNNCleanPredict(x, y, px, py, local=False):
     model = HNN(args.input_dim, differentiable_model=nn_model,
                 field_type=args.field_type, baseline=args.baseline)
 
-    # Load model weights
-    model_path = 'codeFromPaperHnn/cleanPerf-orbits2-hnn.tar'
+    # Load pre-trained model weights
+    model_path = 'cleanPerf-orbits2-hnn.tar'
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint)
 
-    # Normalization parameters
+    # Normalization parameters for input and output scaling
+    # These values appear to be min-max ranges for denormalization
     min1 = torch.tensor([2.6857, 2.8891, -60.0000, -50.0000])
     max1 = torch.tensor([460.8437, 258.8189, 80.0000, 60.0000])
     min2 = torch.tensor([-60., -50., -150., -150.])
     max2 = torch.tensor([80., 60., 150., 150.])
 
-    # Prepare tensors
+    # Prepare initial state tensor
     torch_tensor_original = torch.tensor([x, y, px, py], requires_grad=True).reshape(1, 4)
+
+    # Reshape normalization tensors for broadcasting
     min1 = min1.reshape(1, 4)
     max1 = max1.reshape(1, 4)
     min2 = min2.reshape(1, 4)
     max2 = max2.reshape(1, 4)
 
-    # Three-step integration using the model
+    # Perform three integration steps using the model
     for _ in range(3):
-        # Normalize input
+        # Normalize input to [-1, 1] range
         torch_tensor = 2 * (torch_tensor_original - min1) / (max1 - min1) - 1
 
         # Get derivatives from model
         dxdt_hat = model.time_derivative(torch_tensor)
+
+        # Denormalize the output derivatives
         dxdt_hat = min2 + (dxdt_hat + 1) * (max2 - min2) / 2
 
-        # Update positions and momenta using semi-implicit Euler
+        # Update positions and momenta using semi-implicit Euler integration
+        # Position update includes half of velocity contribution
         nx = x + dxdt_hat[0][0] + dxdt_hat[0][2] / 2
         ny = y + dxdt_hat[0][1] + dxdt_hat[0][3] / 2
+
+        # Momentum update (full step)
         npx = px + dxdt_hat[0][2]
         npy = py + dxdt_hat[0][3]
 
@@ -163,15 +196,19 @@ def HNNCleanPredict(x, y, px, py, local=False):
 
 def NinePointPredict(torch_tensor_original_arr, local=True):
     """
-    Predict using the 36D HNN model for 9 points.
+    Predict using the 36D HNN model for 9 points (each with position and velocity).
+    This models a system of 9 interacting particles in 2D.
 
     Args:
         torch_tensor_original_arr: Input tensor array with 36 elements
+                                   Format: [x1, y1, x2, y2, ..., x9, y9,
+                                           vx1, vy1, vx2, vy2, ..., vx9, vy9]
         local: whether to load model from local directory
 
     Returns:
-        List of predicted values after integration
+        List of predicted values after three integration steps
     """
+    # Get arguments for 36D model
     args = get_args9()
     output_dim = args.input_dim if args.baseline else 2
 
@@ -180,7 +217,8 @@ def NinePointPredict(torch_tensor_original_arr, local=True):
     model = HNN(args.input_dim, differentiable_model=nn_model,
                 field_type=args.field_type, baseline=args.baseline)
 
-    # Normalization parameters
+    # Normalization parameters for 36D system
+    # These are min-max ranges for the 9-point system
     min1 = torch.tensor([[0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
                           0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
                           0.0000, 0.0000, 0.0000, 0.0000, -18.3632, -11.2353, -15.6455,
@@ -205,35 +243,41 @@ def NinePointPredict(torch_tensor_original_arr, local=True):
                           58.0214, 25.7220, 45.1554, 31.7578, 49.1985, 28.0326, 72.1932, 30.7016,
                           46.0045, 32.1513, 59.8764, 41.6628]])
 
-    # Load model weights
-    model_path = 'cleanPerf-orbits9-hnn.tar' if local else 'codeFromPaperHnn/cleanPerf-orbits9-hnn.tar'
+    # Load pre-trained model weights
+    model_path = 'cleanPerf-orbits9-hnn.tar' if local else 'cleanPerf-orbits9-hnn.tar'
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint)
 
     # Prepare input tensor
     torch_tensor_original = torch.tensor(torch_tensor_original_arr, requires_grad=True).reshape(1, 36)
+
+    # Reshape normalization tensors
     min1 = min1.reshape(1, 36)
     max1 = max1.reshape(1, 36)
     min2 = min2.reshape(1, 36)
     max2 = max2.reshape(1, 36)
 
-    # Three-step integration
+    # Perform three integration steps
     for step in range(3):
-        # Normalize input
+        # Normalize input to [-1, 1] range
         torch_tensor = 2 * (torch_tensor_original - min1) / (max1 - min1) - 1
 
         # Get derivatives from model
         dxdt_hat = model.time_derivative(torch_tensor)
+
+        # Denormalize the output derivatives
         dxdt_hat = min2 + (dxdt_hat + 1) * (max2 - min2) / 2
 
         if step < 2:  # For first two steps, update the state
-            # Split into position and velocity components
-            first_half1 = torch_tensor_original[:, :18]  # positions
-            second_half1 = torch_tensor_original[:, 18:]  # velocities
-            first_half2 = dxdt_hat[:, :18]  # position derivatives
-            second_half2 = dxdt_hat[:, 18:]  # velocity derivatives
+            # Split into position (first 18) and velocity (last 18) components
+            first_half1 = torch_tensor_original[:, :18]  # positions (x,y for 9 points)
+            second_half1 = torch_tensor_original[:, 18:]  # velocities (vx,vy for 9 points)
+            first_half2 = dxdt_hat[:, :18]  # position derivatives (dx/dt, dy/dt)
+            second_half2 = dxdt_hat[:, 18:]  # velocity derivatives (dvx/dt, dvy/dt)
 
-            # Update state using semi-implicit Euler
+            # Update state using semi-implicit Euler integration
+            # Positions: x_new = x_old + dx/dt + 0.5 * dv/dt
+            # Velocities: v_new = v_old + dv/dt
             new_tensor = torch.cat([
                 first_half1 + first_half2 + (0.5 * second_half2),  # update positions
                 second_half1 + second_half2  # update velocities
@@ -241,5 +285,5 @@ def NinePointPredict(torch_tensor_original_arr, local=True):
 
             torch_tensor_original = new_tensor
 
-    # Return final state as list
+    # Return final state as a list
     return torch_tensor_original.tolist()

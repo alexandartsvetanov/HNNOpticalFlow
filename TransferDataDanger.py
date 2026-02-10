@@ -1,7 +1,7 @@
 import os
 import re
 import pandas as pd
-from codeFromPaperHnn.Config import paths
+from Config import paths
 
 #This script copies one column from a dataset to another dataset
 

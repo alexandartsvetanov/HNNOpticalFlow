@@ -1,28 +1,32 @@
-import cv2
-import numpy as np
-import os
-import math
-import csv
-from scipy.cluster.vq import kmeans, vq
-from codeFromPaperHnn.utils import choose_nonlinearity
-from codeFromPaperHnn.nn_models import MLP
-from codeFromPaperHnn.nn_models import *
+# Import required libraries
+import cv2          # OpenCV for computer vision operations
+import numpy as np  # NumPy for numerical operations
+import os           # OS module for file system operations
+import math         # Math module for mathematical functions
+import csv          # CSV module for reading/writing CSV files
+from scipy.cluster.vq import kmeans, vq  # K-means clustering algorithms
 
+# Import custom modules (assumed to be in the same directory)
+from utils import choose_nonlinearity
+from nn_models import MLP
+from nn_models import *
+from hnn import *
+from TrainedModel import HNNPredict, HNNCleanPredict
+
+# Import visualization libraries
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+# Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # List all files in the script's directory
 files = os.listdir(script_dir)
 
-from codeFromPaperHnn.hnn import *
-from codeFromPaperHnn.TrainedModel import HNNPredict, HNNCleanPredict
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-
-
-###################################3
+###################################
 # UTILITY FUNCTIONS
-###################################3
+###################################
 
 def euclidean_distance(point1, point2):
     """
@@ -194,11 +198,13 @@ def calculate_grid_flow(old_points, new_points, image_width, image_height, mask,
         yhnn = yhnn.detach().numpy()
 
         # Store original and HNN-processed results
+        # Format: [fragment_id, x, y, vx, vy]
         res.append([fragmentNum, row[0], row[1], row[2], row[3]])
         resHnn.append([fragmentNum, xhnn, yhnn, a - xhnn, b - yhnn])
 
-        # Draw flow vectors on mask
+        # Draw flow vectors on mask (light red lines)
         mask = cv2.line(mask, (int(a), int(b)), (int(xhnn), int(yhnn)), (120, 120, 255), 2)
+        # Draw blue circles at original points on frame
         frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (255, 0, 0), -1)
 
     return res, resHnn
@@ -226,10 +232,10 @@ def caclOpFlow(frame1, frame2):
 
     # Detect features (Shi-Tomasi corners)
     feature_params = dict(
-        maxCorners=100,
-        qualityLevel=0.3,
-        minDistance=7,
-        blockSize=7
+        maxCorners=100,      # Maximum number of corners to detect
+        qualityLevel=0.3,    # Minimum quality of corners (0-1)
+        minDistance=7,       # Minimum Euclidean distance between corners
+        blockSize=7          # Size of neighborhood for corner detection
     )
     prev_pts = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
 
@@ -238,8 +244,8 @@ def caclOpFlow(frame1, frame2):
         next_pts, status, err = cv2.calcOpticalFlowPyrLK(
             prev_gray, next_gray,
             prev_pts, None,
-            winSize=(15, 15),
-            maxLevel=2,
+            winSize=(15, 15),  # Size of search window at each pyramid level
+            maxLevel=2,        # Maximum pyramid level
             criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
         )
     except Exception as e:
@@ -262,8 +268,9 @@ def caclOpFlow(frame1, frame2):
     for i, (new, old) in enumerate(zip(good_new, good_old)):
         a, b = new.ravel()  # New point coordinates
         c, d = old.ravel()  # Old point coordinates
-        # Draw flow line on mask
+        # Draw flow line on mask (green lines)
         mask = cv2.line(mask, (int(a), int(b)), (int(c), int(d)), (0, 255, 0), 2)
+        # Draw red circles at new points on frame
         frame2 = cv2.circle(frame2, (int(a), int(b)), 5, (0, 0, 255), -1)
         # Calculate angle and magnitude of flow
         res = calcAngleMag(a, b, c, d)
@@ -288,13 +295,13 @@ def caclOpFlow(frame1, frame2):
 
     # Display result
     cv2.imshow('Sparse Optical Flow', output)
-    cv2.waitKey(500)
+    cv2.waitKey(500)  # Display for 500ms
     cv2.destroyAllWindows()
 
     return res, resHnn
 
 
-def runFloeForall(videNum, maskNum):
+def runFlowForAll(videNum, maskNum):
     """
     Process all frames in a video sequence for optical flow analysis.
 
@@ -304,7 +311,7 @@ def runFloeForall(videNum, maskNum):
     """
     # Load first frame to get dimensions
     frameStart = cv2.imread("videos" + videNum + "/Frames/0000.jpg")
-    size = frameStart.shape[:2]
+    size = frameStart.shape[:2]  # Get (height, width)
 
     # Count total frames (excluding first and last)
     countFrames = count_image_files("videos" + videNum + "/Frames") - 2
@@ -343,10 +350,11 @@ def runFloeForall(videNum, maskNum):
         cap, capHnn = caclOpFlow(video_dir + '/' + frame_names[i], video_dir + '/' + frame_names[i + 1])
 
         # Calculate frame number and center point
-        frameNum = int(frame_names[i][6:8]) + 0.0001
+        frameNum = int(frame_names[i][6:8]) + 0.0001  # Extract frame number from filename
         centerPoint = [coordinates[i][0] + coordinates[i][2] / 2, coordinates[i][1] + coordinates[i][3] / 2]
 
         # Calculate importance score for this frame
+        # Score formula combines: frame position, bounding box size, and distance from center
         score = ((pow(frameNum, 2) / pow(countFrames, 2)) *
                  (coordinates[i][2] * coordinates[i][3]) / ((size[0] * size[1])) *
                  (1 - euclidean_distance(
@@ -370,11 +378,13 @@ def runFloeForall(videNum, maskNum):
 
 
 # MAIN EXECUTION
-###################################3
+###################################
+# Test with specific video and mask
+runFlowForAll(str(2), str(3))
+exit()
 
-
-# Process all existing videos and masks
-for vid in range(22):
-    for mask in range(10):
-        if os.path.exists("videos" + str(vid) + "/mask" + str(mask) + '/coordinates.csv'):
-            runFloeForall(str(vid), str(mask))
+# Process all existing videos and masks (commented out for now)
+# for vid in range(22):
+#     for mask in range(10):
+#         if os.path.exists("videos" + str(vid) + "/mask" + str(mask) + '/coordinates.csv'):
+#             runFlowForAll(str(vid), str(mask))

@@ -20,7 +20,14 @@ import os
 from PIL import Image
 import numpy as np
 import torch
+from Config import paths
 
+# =============================================
+# CONFIGURATION AND UTILITY FUNCTIONS
+# =============================================
+
+# Get main folder path from configuration
+main_folder = paths['mainfolder']
 def parse_value(x):
     if isinstance(x, str):
         try:
@@ -130,7 +137,7 @@ def getData():
     xTrain_combined = []
     yTrain_combined = []
     i = 0
-    for mask in get_mask_subdirs_os2(f'C:/Users/Alexs/PyCharmMiscProject/pythonProject7/object_tracking/object_tracking/samMooooolq/segmentAnything'):
+    for mask in get_mask_subdirs_os2(main_folder):
         #if i > 0:
             #continue
         i = i + 1
@@ -205,6 +212,7 @@ class SequenceDataset(Dataset):
             # Create windows
             for i in range(seq_length - window_size + 1):
                 window = seq[i:i + window_size]
+                print(len(target_seq), window_size, i)
                 target = target_seq[i + window_size - 1]  # Target is the first element in window
 
                 self.X.append(window)

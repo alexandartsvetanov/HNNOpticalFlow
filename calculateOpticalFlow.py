@@ -3,11 +3,7 @@ import numpy as np
 import os
 import math
 import csv
-from codeFromPaperHnn.utils import choose_nonlinearity
-from codeFromPaperHnn.nn_models import MLP
-from codeFromPaperHnn.nn_models import *
-from codeFromPaperHnn.hnn import *
-from codeFromPaperHnn.TrainedModel import HNNPredict
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
@@ -30,8 +26,8 @@ Key steps:
 """
 
 # Configuration: Specify video and mask numbers
-videoNum = "4"  # Video identifier (e.g., "4" for videos/4/)
-maskNum = "1"  # Mask identifier (e.g., "1" for mask1/)
+videoNum = "2"  # Video identifier (e.g., "4" for videos/4/)
+maskNum = "3"  # Mask identifier (e.g., "1" for mask1/)
 
 # Load the first frame to determine image size (height, width, channels)
 frameStart = cv2.imread("videos" + videoNum + "/Frames/0000.jpg")
@@ -357,6 +353,7 @@ for i in range(len(frame_names) - 1):
     frameNum = int(frame_names[i][6:8]) + 0.0001  # Small offset to avoid integer issues
 
     # Compute center point of the bounding box
+    print(coordinates)
     centerPoint = [
         coordinates[i][0] + coordinates[i][2] / 2,  # y_center = upMin + height/2
         coordinates[i][1] + coordinates[i][3] / 2  # x_center = rightMin + width/2

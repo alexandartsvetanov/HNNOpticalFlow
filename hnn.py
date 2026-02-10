@@ -4,8 +4,9 @@
 import torch
 import numpy as np
 
-from codeFromPaperHnn.nn_models import MLP
-from codeFromPaperHnn.utils import rk4
+from nn_models import MLP
+from utils import rk4
+
 
 
 class HNN(torch.nn.Module):
